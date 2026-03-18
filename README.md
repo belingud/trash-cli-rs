@@ -1,18 +1,18 @@
-# trasher
+# trash-cli-rs
 
 A friendly command-line tool to move files to trash/recycle bin, based on the `trash-rs` crate.
 
 ## Installation
 
 ```bash
-cargo install trasher
+cargo install trash-cli-rs
 ```
 
 Install from source:
 
 ```bash
-git clone https://github.com/belingud/trasher.git
-cd trasher
+git clone https://github.com/belingud/trash-cli-rs.git
+cd trash-cli-rs
 cargo install --path .
 ```
 

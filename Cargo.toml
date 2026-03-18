@@ -1,0 +1,18 @@
+[package]
+name = "trasher"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85.0"
+description = "A cross-platform command-line tool to move files to trash"
+license = "MIT"
+repository = "https://github.com/belingud/trasher"
+keywords = ["trash", "recycle", "delete", "cli"]
+categories = ["utility", "os::unix-utilities"]
+
+[[bin]]
+name = "trash"
+path = "src/main.rs"
+description = "Move files to trash/recycle bin"
+
+[dependencies]
+trash = "5"

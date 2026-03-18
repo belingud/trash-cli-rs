@@ -7,7 +7,6 @@ description = "A cross-platform command-line tool to move files to trash"
 license = "MIT"
 repository = "https://github.com/belingud/trash-cli-rs"
 keywords = ["trash", "recycle", "delete", "cli"]
-categories = ["utility", "os::unix-utilities"]
 
 [[bin]]
 name = "trash"

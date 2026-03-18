@@ -1,11 +1,11 @@
 [package]
-name = "trasher"
+name = "trash-cli-rs"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.85.0"
 description = "A cross-platform command-line tool to move files to trash"
 license = "MIT"
-repository = "https://github.com/belingud/trasher"
+repository = "https://github.com/belingud/trash-cli-rs"
 keywords = ["trash", "recycle", "delete", "cli"]
 categories = ["utility", "os::unix-utilities"]
 

@@ -2,6 +2,8 @@
 
 A friendly command-line tool to move files to trash/recycle bin, based on the `trash-rs` crate.
 
+Just a reminder, new macOS (newer than macOS 14) has built-in trash command.
+
 ## Installation
 
 ```bash

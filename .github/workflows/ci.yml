@@ -2,13 +2,17 @@ name: CI
 
 on:
   push:
-  pull_request:
+    branches:
+      - master
+    tags:
+      - 'v*'
 
 permissions:
   contents: read
 
 jobs:
   check:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     name: ${{ matrix.name }} / rust ${{ matrix.toolchain }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -22,7 +26,7 @@ jobs:
             os: ubuntu-24.04-arm
             toolchain: 1.85.0
           - name: windows x64
-            os: windows-2025
+            os: windows-latest
             toolchain: 1.85.0
           - name: macos 15 arm64
             os: macos-15
@@ -53,7 +57,6 @@ jobs:
   build-release-assets:
     name: Build release asset / ${{ matrix.name }}
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: check
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -160,7 +163,6 @@ jobs:
     name: GitHub Release
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs:
-      - check
       - build-release-assets
     runs-on: ubuntu-24.04
     permissions:
@@ -174,30 +176,27 @@ jobs:
           merge-multiple: true
           path: dist
 
-      - name: Create or update GitHub release from tag
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG_NAME: ${{ github.ref_name }}
+      - name: Generate checksums
+        shell: bash
         run: |
           shopt -s nullglob
-          assets=(dist/*)
+          assets=(dist/*.tar.gz dist/*.zip)
           if [[ ${#assets[@]} -eq 0 ]]; then
             echo "No release assets were downloaded."
             exit 1
           fi
 
-          if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
-            gh release upload "${TAG_NAME}" "${assets[@]}" --clobber
-            exit 0
-          fi
+          (
+            cd dist
+            sha256sum *.tar.gz *.zip > checksums.txt
+          )
 
-          prerelease_flag=()
-          if [[ "${TAG_NAME}" == *-* ]]; then
-            prerelease_flag+=(--prerelease)
-          fi
-
-          gh release create "${TAG_NAME}" \
-            --verify-tag \
-            --generate-notes \
-            "${prerelease_flag[@]}" \
-            "${assets[@]}"
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt

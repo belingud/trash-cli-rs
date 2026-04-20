@@ -1,5 +1,7 @@
 # trash-cli-rs
 
+[中文](./README-zh.md)
+
 A friendly command-line tool to move files to trash/recycle bin, based on the `trash-rs` crate.
 It is designed first for safe trashing, and second for working well with aliases such as `alias rm="trash"`.
 

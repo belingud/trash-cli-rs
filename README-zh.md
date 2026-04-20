@@ -1,5 +1,7 @@
 # trash-cli-rs
 
+[English](./README.md)
+
 一个友好的命令行工具，用于将文件移动到回收站/垃圾箱，基于 `trash-rs` crate。
 它首先设计用于安全删除，其次用于与别名（如 `alias rm="trash"`）良好配合。
 

@@ -1,6 +1,6 @@
 [package]
 name = "trash-cli-rs"
-version = "0.3.1"
+version = "1.0.0"
 edition = "2021"
 rust-version = "1.85.0"
 description = "A cross-platform command-line tool to move files to trash"

@@ -427,7 +427,7 @@ dependencies = [
 
 [[package]]
 name = "trash-cli-rs"
-version = "0.3.1"
+version = "1.0.0"
 dependencies = [
  "tempfile",
  "trash",

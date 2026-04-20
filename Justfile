@@ -96,7 +96,7 @@ publish version:
     exit 1
   fi
 
-  cargo publish --registry crates-io
+  cargo publish --registry crates-io --allow-dirty
   git push origin HEAD
   git push origin "v${version}"
 

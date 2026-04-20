@@ -1,0 +1,203 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: ${{ matrix.name }} / rust ${{ matrix.toolchain }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux x64
+            os: ubuntu-24.04
+            toolchain: 1.85.0
+          - name: linux arm64
+            os: ubuntu-24.04-arm
+            toolchain: 1.85.0
+          - name: windows x64
+            os: windows-2025
+            toolchain: 1.85.0
+          - name: macos 15 arm64
+            os: macos-15
+            toolchain: 1.85.0
+          - name: macos 15 intel
+            os: macos-15-intel
+            toolchain: 1.85.0
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          components: rustfmt
+
+      - name: Cache Cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all --check
+
+      - name: Run tests
+        run: cargo test
+
+  build-release-assets:
+    name: Build release asset / ${{ matrix.name }}
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: check
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux x64
+            os: ubuntu-24.04
+            toolchain: 1.85.0
+            target: x86_64-unknown-linux-gnu
+            archive_ext: tar.gz
+            binary_name: trash
+          - name: linux arm64
+            os: ubuntu-24.04-arm
+            toolchain: 1.85.0
+            target: aarch64-unknown-linux-gnu
+            archive_ext: tar.gz
+            binary_name: trash
+          - name: windows x64
+            os: windows-latest
+            toolchain: 1.85.0
+            target: x86_64-pc-windows-msvc
+            archive_ext: zip
+            binary_name: trash.exe
+          - name: macos 15 arm64
+            os: macos-15
+            toolchain: 1.85.0
+            target: aarch64-apple-darwin
+            archive_ext: tar.gz
+            binary_name: trash
+          - name: macos 15 intel
+            os: macos-15-intel
+            toolchain: 1.85.0
+            target: x86_64-apple-darwin
+            archive_ext: tar.gz
+            binary_name: trash
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.toolchain }}
+
+      - name: Cache Cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --locked --release --target ${{ matrix.target }}
+
+      - name: Package release asset (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+          TARGET: ${{ matrix.target }}
+          ARCHIVE_EXT: ${{ matrix.archive_ext }}
+          BINARY_NAME: ${{ matrix.binary_name }}
+        run: |
+          set -euo pipefail
+
+          version="${TAG_NAME#v}"
+          package_dir="trash-cli-rs-${version}-${TARGET}"
+          archive_name="${package_dir}.${ARCHIVE_EXT}"
+
+          rm -rf "${package_dir}" dist
+          mkdir -p "${package_dir}" dist
+          cp "target/${TARGET}/release/${BINARY_NAME}" "${package_dir}/"
+          cp README.md LICENSE "${package_dir}/"
+          tar -czf "dist/${archive_name}" "${package_dir}"
+
+      - name: Package release asset (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+          TARGET: ${{ matrix.target }}
+          ARCHIVE_EXT: ${{ matrix.archive_ext }}
+          BINARY_NAME: ${{ matrix.binary_name }}
+        run: |
+          $version = $env:TAG_NAME.TrimStart('v')
+          $packageDir = "trash-cli-rs-$version-$env:TARGET"
+          $archiveName = "$packageDir.$env:ARCHIVE_EXT"
+
+          if (Test-Path $packageDir) { Remove-Item -Recurse -Force $packageDir }
+          if (Test-Path dist) { Remove-Item -Recurse -Force dist }
+
+          New-Item -ItemType Directory -Path $packageDir | Out-Null
+          New-Item -ItemType Directory -Path dist | Out-Null
+
+          Copy-Item "target/$env:TARGET/release/$env:BINARY_NAME" "$packageDir/"
+          Copy-Item README.md, LICENSE "$packageDir/"
+          Compress-Archive -Path "$packageDir/*" -DestinationPath "dist/$archiveName"
+
+      - name: Upload packaged asset
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - check
+      - build-release-assets
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download packaged assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist
+
+      - name: Create or update GitHub release from tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          shopt -s nullglob
+          assets=(dist/*)
+          if [[ ${#assets[@]} -eq 0 ]]; then
+            echo "No release assets were downloaded."
+            exit 1
+          fi
+
+          if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
+            gh release upload "${TAG_NAME}" "${assets[@]}" --clobber
+            exit 0
+          fi
+
+          prerelease_flag=()
+          if [[ "${TAG_NAME}" == *-* ]]; then
+            prerelease_flag+=(--prerelease)
+          fi
+
+          gh release create "${TAG_NAME}" \
+            --verify-tag \
+            --generate-notes \
+            "${prerelease_flag[@]}" \
+            "${assets[@]}"

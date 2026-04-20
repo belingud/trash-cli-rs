@@ -3,32 +3,43 @@ use std::path::Path;
 use std::process;
 use trash::Error;
 
-const USAGE: &str = "Usage: trash <file> [<file> ...]";
+const ERROR_PREFIX: &str = "trash";
+const USAGE: &str = "Usage: trash [rm-compat-options...] <file> [<file> ...]";
 const HELP_TEXT: &str = "\
 trash-cli-rs
 
 Move files and directories to the system trash.
 
+This tool is not a semantic replacement for rm.
+Documented rm-style compatibility flags are ignored for alias compatibility only.
+They do not enable force deletion, interactive prompts, secure erase, or recursive traversal semantics.
+
 Usage:
-  trash [rm-options...] <file> [<file> ...]
+  trash [rm-compat-options...] <file> [<file> ...]
   trash --help
   trash --version
 
 rm alias compatibility:
-  Common rm-style flags such as -f, -r, -rf, --force, and --recursive are ignored.
+  Supported compatibility flags are ignored before operands.
+  Unknown flags are treated as literal operands.
   To trash a filename that starts with '-', use:
     trash -- -rf
     trash ./-rf
 ";
+const RM_COMPAT_SHORT_FLAGS: &[char] = &['d', 'f', 'i', 'I', 'P', 'R', 'r', 'v', 'x'];
 const RM_COMPAT_LONG_FLAGS: &[&str] = &[
+    "--dir",
     "--force",
     "--interactive",
-    "--recursive",
-    "--dir",
-    "--verbose",
+    "--interactive=always",
+    "--interactive=never",
+    "--interactive=once",
+    "--no-preserve-root",
     "--one-file-system",
     "--preserve-root",
-    "--no-preserve-root",
+    "--preserve-root=all",
+    "--recursive",
+    "--verbose",
 ];
 
 #[derive(Debug, PartialEq, Eq)]
@@ -73,7 +84,7 @@ fn run(args: &[String]) -> i32 {
     for path in operands {
         // First check if the file exists
         if !Path::new(path).exists() {
-            eprintln!("trash: '{}' path not exists", path);
+            eprintln!("{ERROR_PREFIX}: {path}: {}", missing_path_message());
             has_error = true;
             continue;
         }
@@ -84,8 +95,8 @@ fn run(args: &[String]) -> i32 {
                 // Success - no output as per convention
             }
             Err(e) => {
-                let msg = format_error(&e, path);
-                eprintln!("trash: {}", msg);
+                let msg = format_error(&e);
+                eprintln!("{ERROR_PREFIX}: {path}: {msg}");
                 has_error = true;
             }
         }
@@ -150,17 +161,17 @@ fn is_short_rm_compat_cluster(arg: &str) -> bool {
 
     flags
         .chars()
-        .all(|flag| matches!(flag, 'f' | 'i' | 'I' | 'r' | 'R' | 'd' | 'v'))
+        .all(|flag| RM_COMPAT_SHORT_FLAGS.contains(&flag))
 }
 
-fn format_error(err: &Error, path: &str) -> String {
+fn missing_path_message() -> &'static str {
+    "No such file or directory"
+}
+
+fn format_error(err: &Error) -> String {
     match err {
-        Error::CouldNotAccess { target: _ } => {
-            format!("'{}' path not exists", path)
-        }
-        Error::CanonicalizePath { original: _ } => {
-            format!("'{}' path not exists", path)
-        }
+        Error::CouldNotAccess { target: _ } => missing_path_message().to_string(),
+        Error::CanonicalizePath { original: _ } => missing_path_message().to_string(),
         Error::Unknown { description } => description.clone(),
         Error::Os { description, .. } => description.clone(),
         #[cfg(all(
@@ -169,13 +180,9 @@ fn format_error(err: &Error, path: &str) -> String {
             not(target_os = "ios"),
             not(target_os = "android")
         ))]
-        Error::FileSystem { path: _, source } => {
-            format!("'{}': {}", path, source)
-        }
+        Error::FileSystem { path: _, source } => source.to_string(),
         Error::TargetedRoot => "cannot remove root directory".to_string(),
-        Error::ConvertOsString { original } => {
-            format!("invalid path: {:?}", original)
-        }
+        Error::ConvertOsString { original } => format!("invalid path: {:?}", original),
         Error::RestoreCollision { .. } => "restore collision".to_string(),
         Error::RestoreTwins { .. } => "restore twins".to_string(),
     }
@@ -212,23 +219,32 @@ mod tests {
 
     #[test]
     fn ignores_supported_short_flag_clusters() {
-        let args = args(&["-rf", "file1", "-v", "file2"]);
+        let args = args(&["-rfxP", "file1", "-v", "file2"]);
 
         assert_eq!(filter_operands(&args), vec!["file1", "file2"]);
     }
 
     #[test]
     fn ignores_supported_long_flags() {
-        let args = args(&["--force", "--recursive", "file.txt"]);
+        let args = args(&[
+            "--force",
+            "--recursive",
+            "--interactive=once",
+            "--preserve-root=all",
+            "file.txt",
+        ]);
 
         assert_eq!(filter_operands(&args), vec!["file.txt"]);
     }
 
     #[test]
     fn keeps_unknown_dashed_args() {
-        let args = args(&["--bogus", "file.txt"]);
+        let args = args(&["--bogus", "-W", "--interactive=maybe", "file.txt"]);
 
-        assert_eq!(filter_operands(&args), vec!["--bogus", "file.txt"]);
+        assert_eq!(
+            filter_operands(&args),
+            vec!["--bogus", "-W", "--interactive=maybe", "file.txt"]
+        );
     }
 
     #[test]

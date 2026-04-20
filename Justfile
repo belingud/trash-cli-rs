@@ -15,6 +15,22 @@ check:
   cargo fmt --all --check
   cargo test
 
+# Verify the package installs cleanly into a temporary root from a locked dependency set.
+install-smoke:
+  #!/usr/bin/env bash
+  set -euo pipefail
+
+  install_root="$(mktemp -d "${TMPDIR:-/tmp}/trash-cli-install.XXXXXX")"
+  trap 'rm -rf "${install_root}"' EXIT
+
+  cargo install --path . --locked --root "${install_root}"
+  "${install_root}/bin/trash" --version
+
+# Run the release preflight checks that should stay green before tagging a version.
+release-check:
+  just check
+  just install-smoke
+
 # Print the current package version from Cargo.toml.
 version:
   @sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1
